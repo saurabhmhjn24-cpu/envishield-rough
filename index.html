@@ -394,7 +394,7 @@ button {
     <div class="aqi-cell"><strong>Advice for general population</strong><span id="aqiGeneral">—</span></div>
     <div class="aqi-cell"><strong>Advice for vulnerable population</strong><span id="aqiVulnerable">—</span></div>
   </div>
-  <div class="aqi-meta" id="aqiMeta">India AQI estimate calculated from location-based atmospheric pollutant data.</div>
+  <div class="aqi-meta" id="aqiMeta">Checking nearby CPCB monitoring data; modelled data will be used only when required.</div>
 </section>
 
 <div id="plot"></div>
@@ -415,6 +415,13 @@ button {
 // the worker holds — so it's fine that it lives in this public page's source.
 const DEFAULT_WORKER_URL = 'https://ambient-weather-proxy.heatstress.workers.dev';
 const SHAKURBASTI_COORDS = {lat: 28.6852, lon: 77.1315};
+const CPCB_RESOURCE_ID = '3b01bcb8-0b14-4abf-b6f2-c1bfd384ba69';
+// Public data.gov.in access key. Replace with your own registered key if the
+// public key is rate-limited. Do not place a private/paid credential here.
+const CPCB_API_KEY = '579b464db66ec23bdd0000017d0wnload';
+const CPCB_MAX_DISTANCE_KM = 50;
+const CPCB_MAX_AGE_HOURS = 4;
+const CPCB_CACHE_MS = 10 * 60 * 1000;
 
 // ================== Zone boundary math (unchanged from original) ==================
 function safeCautionBoundary(rh) {
@@ -557,6 +564,120 @@ async function fetchIndiaAQI(lat, lon, targetDate) {
   return indiaAQIFromHourly(data.hourly, index);
 }
 
+let cpcbCache = {timestamp: 0, records: []};
+
+function parseNumber(value) {
+  if (value === null || value === undefined || value === '' || value === 'NA' || value === '-') return null;
+  const number = Number(String(value).replace(/,/g, '').trim());
+  return Number.isFinite(number) ? number : null;
+}
+
+function parseCPCBDate(value) {
+  if (!value) return null;
+  const text = String(value).trim();
+  const dmy = text.match(/^(\d{1,2})[-\/]([A-Za-z]{3}|\d{1,2})[-\/](\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (dmy) {
+    const months = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    const month = /^\d+$/.test(dmy[2]) ? Number(dmy[2]) - 1 : months[dmy[2].toLowerCase()];
+    const parsed = new Date(Number(dmy[3]), month, Number(dmy[1]), Number(dmy[4]), Number(dmy[5]), Number(dmy[6] || 0));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = degrees => degrees * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function fetchCPCBRecords() {
+  if (cpcbCache.records.length && Date.now() - cpcbCache.timestamp < CPCB_CACHE_MS) {
+    return cpcbCache.records;
+  }
+
+  const records = [];
+  const limit = 1000;
+  let total = Infinity;
+  for (let offset = 0; offset < total && offset < 10000; offset += limit) {
+    const url = `https://api.data.gov.in/resource/${CPCB_RESOURCE_ID}?api-key=${encodeURIComponent(CPCB_API_KEY)}&format=json&limit=${limit}&offset=${offset}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('CPCB data request failed (' + res.status + ').');
+    const data = await res.json();
+    const page = Array.isArray(data.records) ? data.records : [];
+    records.push(...page);
+    total = Number.isFinite(Number(data.total)) ? Number(data.total) : records.length;
+    if (page.length < limit) break;
+  }
+  if (!records.length) throw new Error('CPCB returned no current station readings.');
+  cpcbCache = {timestamp: Date.now(), records};
+  return records;
+}
+
+function cpcbPollutantKey(value) {
+  const key = String(value || '').toUpperCase().replace(/\s/g, '');
+  const map = {
+    'PM10':'pm10', 'PM2.5':'pm2_5', 'PM25':'pm2_5', 'NO2':'nitrogen_dioxide',
+    'SO2':'sulphur_dioxide', 'CO':'carbon_monoxide', 'OZONE':'ozone', 'O3':'ozone', 'NH3':'ammonia'
+  };
+  return map[key] || null;
+}
+
+function cpcbStationAQI(pollutants) {
+  const keys = Object.keys(pollutants);
+  const hasParticulate = keys.includes('pm10') || keys.includes('pm2_5');
+  if (!hasParticulate || keys.length < 3) return null;
+  const indices = keys.map(key => ({key, value: aqiSubIndex(pollutants[key], AQI_BREAKPOINTS[key])}))
+    .filter(item => Number.isFinite(item.value))
+    .sort((a, b) => b.value - a.value);
+  if (!indices.length) return null;
+  return {aqi: Math.min(500, Math.round(indices[0].value)), dominant: AQI_POLLUTANT_LABELS[indices[0].key]};
+}
+
+async function fetchNearestCPCB(lat, lon) {
+  const records = await fetchCPCBRecords();
+  const stations = new Map();
+
+  for (const record of records) {
+    const stationLat = parseNumber(record.latitude);
+    const stationLon = parseNumber(record.longitude);
+    const pollutant = cpcbPollutantKey(record.pollutant_id || record.pollutant);
+    const value = parseNumber(record.pollutant_avg || record.avg_value || record.average);
+    if (stationLat === null || stationLon === null || !pollutant || value === null) continue;
+
+    const stationName = record.station || record.station_name || 'CPCB monitoring station';
+    const key = `${stationName}|${stationLat}|${stationLon}`;
+    if (!stations.has(key)) {
+      stations.set(key, {
+        station: stationName,
+        city: record.city || '', state: record.state || '',
+        lat: stationLat, lon: stationLon, pollutants: {}, updated: null
+      });
+    }
+    const station = stations.get(key);
+    station.pollutants[pollutant] = value;
+    const updated = parseCPCBDate(record.last_update || record.last_updated || record.updated_at);
+    if (updated && (!station.updated || updated > station.updated)) station.updated = updated;
+  }
+
+  const candidates = [];
+  for (const station of stations.values()) {
+    const distanceKm = haversineKm(lat, lon, station.lat, station.lon);
+    const ageHours = station.updated ? (Date.now() - station.updated.getTime()) / 3600000 : Infinity;
+    const result = cpcbStationAQI(station.pollutants);
+    if (result && distanceKm <= CPCB_MAX_DISTANCE_KM && ageHours >= -1 && ageHours <= CPCB_MAX_AGE_HOURS) {
+      candidates.push({...station, ...result, distanceKm, ageHours});
+    }
+  }
+  candidates.sort((a, b) => a.distanceKm - b.distanceKm);
+  if (!candidates.length) throw new Error('No sufficiently fresh CPCB station was found within 50 km.');
+  return candidates[0];
+}
+
 function guidanceForAQI(aqi) {
   return AQI_GUIDANCE.find(item => aqi <= item.max) || AQI_GUIDANCE[AQI_GUIDANCE.length - 1];
 }
@@ -590,7 +711,29 @@ async function updateAQIPanel(lat, lon, targetDate, location) {
   if (!document.getElementById('showAQIToggle').checked) return;
   showAQILoading(location);
   try {
-    const result = await fetchIndiaAQI(lat, lon, targetDate);
+    let result;
+    let sourceText;
+    let cpcbFailure = '';
+
+    if (!targetDate) {
+      try {
+        const station = await fetchNearestCPCB(lat, lon);
+        result = {aqi: station.aqi, dominant: station.dominant};
+        const place = [station.station, station.city, station.state].filter(Boolean)
+          .filter((value, index, values) => values.indexOf(value) === index).join(', ');
+        sourceText = `Source: CPCB station data — ${place}; ${station.distanceKm.toFixed(1)} km away; updated ${station.updated.toLocaleString()}.`;
+      } catch (err) {
+        cpcbFailure = err.message;
+      }
+    }
+
+    if (!result) {
+      result = await fetchIndiaAQI(lat, lon, targetDate);
+      sourceText = targetDate
+        ? 'Source: Modelled Open-Meteo estimate for the selected date and time; the CPCB feed provides current station data only.'
+        : `Source: Modelled Open-Meteo estimate. CPCB fallback reason: ${cpcbFailure || 'No suitable current CPCB reading.'}`;
+    }
+
     const guide = guidanceForAQI(result.aqi);
     const panel = document.getElementById('aqiPanel');
     panel.style.borderLeftColor = guide.color;
@@ -600,7 +743,7 @@ async function updateAQIPanel(lat, lon, targetDate, location) {
     document.getElementById('aqiRisk').textContent = guide.risk;
     document.getElementById('aqiGeneral').textContent = guide.general;
     document.getElementById('aqiVulnerable').textContent = guide.vulnerable;
-    document.getElementById('aqiMeta').textContent = `Dominant pollutant: ${result.dominant}. India AQI estimate calculated using CPCB breakpoints and Open-Meteo atmospheric pollutant data.`;
+    document.getElementById('aqiMeta').textContent = `${sourceText} Dominant pollutant: ${result.dominant}. India AQI calculated using CPCB breakpoints.`;
   } catch (err) {
     showAQIError(location, err.message);
   }
