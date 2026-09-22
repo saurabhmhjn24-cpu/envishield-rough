@@ -29,7 +29,7 @@ body {
 
 .controls {
   display: grid;
-  grid-template-columns: 1.2fr 1fr auto auto auto;
+  grid-template-columns: 1fr 1fr auto auto auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 12px;
@@ -40,6 +40,8 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
 .card label {
@@ -62,14 +64,38 @@ select, input[type="text"], input[type="search"] {
 .subfield.hidden { display: none; }
 
 .location-search-wrap { position: relative; }
+.location-search-wrap input { padding-right: 42px; }
+.location-search-wrap input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.location-clear {
+  position: absolute;
+  z-index: 1001;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #555;
+  font-size: 23px;
+  font-weight: 400;
+  line-height: 1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.location-clear.visible { display: flex; }
+.location-clear:hover, .location-clear:focus { background: #e8e8e8; color: #111; }
 .location-suggestions {
   position: absolute;
   z-index: 1000;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  max-height: 240px;
+  max-height: min(240px, 35vh);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -77,8 +103,10 @@ select, input[type="text"], input[type="search"] {
 }
 .location-suggestions.hidden { display: none; }
 .location-option {
-  padding: 9px 10px;
+  padding: 11px 10px;
+  min-height: 44px;
   cursor: pointer;
+  touch-action: manipulation;
   font-size: 14px;
   line-height: 1.25;
   border-bottom: 1px solid #eee;
@@ -112,6 +140,60 @@ button {
 }
 
 .hint { font-size: 12px; color: #444; margin-top: 6px; }
+
+.aqi-toggle {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0 !important;
+  cursor: pointer;
+  font-weight: 600 !important;
+}
+.aqi-toggle input { width: auto; height: 17px; }
+.aqi-panel {
+  margin: 0 0 12px;
+  border: 1px solid var(--border);
+  border-left: 9px solid #7cb36d;
+  border-radius: 10px;
+  background: #f7f7f7;
+  overflow: hidden;
+}
+.aqi-panel.hidden { display: none; }
+.aqi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.45);
+}
+.aqi-title { font-weight: 700; font-size: 17px; }
+.aqi-location { margin-top: 3px; color: #444; font-size: 13px; }
+.aqi-badge {
+  min-width: 128px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 700;
+  background: #7cb36d;
+}
+.aqi-value { display: block; font-size: 24px; line-height: 1; }
+.aqi-category { display: block; margin-top: 3px; font-size: 14px; }
+.aqi-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr 1fr;
+  border-top: 1px solid rgba(0,0,0,0.16);
+}
+.aqi-cell { padding: 12px 14px; border-right: 1px solid rgba(0,0,0,0.16); }
+.aqi-cell:last-child { border-right: 0; }
+.aqi-cell strong { display: block; margin-bottom: 5px; font-size: 13px; }
+.aqi-cell span { font-size: 14px; line-height: 1.35; }
+.aqi-meta {
+  padding: 8px 14px;
+  border-top: 1px solid rgba(0,0,0,0.12);
+  font-size: 11px;
+  color: #444;
+}
 
 .status-bar {
   display: flex;
@@ -165,7 +247,11 @@ button {
   .controls .card:first-child,
   .controls .card:nth-child(2) {
     grid-column: 1 / -1; /* data source and date/time cards take full width */
+    width: 100%;
+    min-width: 0;
   }
+  #historicalFields > div { width: 100%; min-width: 0; }
+  #histDate, #histTime { min-width: 0 !important; }
   .controls button {
     grid-column: span 1;
   }
@@ -185,6 +271,13 @@ button {
 
   .zone-desc { font-size: 13px !important; }
   .source-note { font-size: 12px !important; }
+  .location-suggestions { max-height: 32vh; }
+  .location-option { padding: 13px 12px; min-height: 48px; font-size: 15px; }
+  .aqi-head { align-items: flex-start; }
+  .aqi-badge { min-width: 108px; }
+  .aqi-grid { grid-template-columns: 1fr; }
+  .aqi-cell { border-right: 0; border-bottom: 1px solid rgba(0,0,0,0.14); }
+  .aqi-cell:last-child { border-bottom: 0; }
 }
 
 @media (max-width: 420px) {
@@ -204,6 +297,7 @@ button {
   .wrap { max-width: none; padding: 0; }
   .print-heading { display: block !important; }
   #plot { height: 74vh; border: none; }
+  .aqi-panel { break-inside: avoid; }
   @page { size: landscape; margin: 8mm; }
 }
 </style>
@@ -235,6 +329,7 @@ button {
     <div class="subfield hidden" id="locationSearchFields">
       <div class="location-search-wrap">
         <input type="search" id="locationSearch" placeholder="Enter city or location e.g. New Delhi" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="locationSuggestions" aria-expanded="false">
+        <button type="button" id="clearLocationSearch" class="location-clear" aria-label="Clear location" title="Clear location">&times;</button>
         <div id="locationSuggestions" class="location-suggestions hidden" role="listbox"></div>
       </div>
       <div class="hint">Type at least 2 characters, then select a location from the suggestions.</div>
@@ -258,6 +353,11 @@ button {
       <input type="text" id="ambientWorkerUrl" value="" readonly style="background:#eee; color:#555;">
       <div class="hint">Visitors never see or enter any key. This page calls the worker URL above only, which is hardcoded in the page's DEFAULT_WORKER_URL setting and only ever returns temperature/humidity — never your credentials.</div>
     </div>
+
+    <label class="aqi-toggle" for="showAQIToggle">
+      <input type="checkbox" id="showAQIToggle" checked onchange="onAQIToggle()">
+      Show AQI, health risk &amp; advice
+    </label>
   </div>
 
   <div class="card">
@@ -278,6 +378,25 @@ button {
   <button class="tertiary" onclick="clearHistory()">Clear Today's Points</button>
 </div>
 
+<section id="aqiPanel" class="aqi-panel hidden" aria-live="polite">
+  <div class="aqi-head">
+    <div>
+      <div class="aqi-title">Air Quality Index</div>
+      <div class="aqi-location" id="aqiLocation">Waiting for a location…</div>
+    </div>
+    <div class="aqi-badge" id="aqiBadge">
+      <span class="aqi-value" id="aqiValue">—</span>
+      <span class="aqi-category" id="aqiCategory">Loading</span>
+    </div>
+  </div>
+  <div class="aqi-grid">
+    <div class="aqi-cell"><strong>Possible health consequences</strong><span id="aqiRisk">Loading air-quality details…</span></div>
+    <div class="aqi-cell"><strong>Advice for general population</strong><span id="aqiGeneral">—</span></div>
+    <div class="aqi-cell"><strong>Advice for vulnerable population</strong><span id="aqiVulnerable">—</span></div>
+  </div>
+  <div class="aqi-meta" id="aqiMeta">India AQI estimate calculated from location-based atmospheric pollutant data.</div>
+</section>
+
 <div id="plot"></div>
 
 <div class="zone-desc" style="margin-top: 20px; font-size: 15px; text-align: center; color: #333;">
@@ -295,6 +414,7 @@ button {
 // This is NOT a secret — it can't be used to pull your data without the keys
 // the worker holds — so it's fine that it lives in this public page's source.
 const DEFAULT_WORKER_URL = 'https://ambient-weather-proxy.heatstress.workers.dev';
+const SHAKURBASTI_COORDS = {lat: 28.6852, lon: 77.1315};
 
 // ================== Zone boundary math (unchanged from original) ==================
 function safeCautionBoundary(rh) {
@@ -318,6 +438,183 @@ function heatZone(temp, rh) {
 function symbolFor(i) {
   const symbols = ['circle', 'square', 'diamond', 'triangle-up', 'x', 'star', 'cross', 'triangle-down', 'hexagon'];
   return symbols[i % symbols.length];
+}
+
+// ================== "Feels like" (heat index) ==================
+// Standard NWS Rothfusz regression, computed in °F/RH% and converted to °C.
+// Below about 80°F, the simpler NWS estimate is used because heat-index effects
+// are generally small at lower temperatures.
+function feelsLikeC(tempC, rh) {
+  const tempF = tempC * 9 / 5 + 32;
+  let hiF = 0.5 * (tempF + 61.0 + ((tempF - 68.0) * 1.2) + (rh * 0.094));
+
+  if ((hiF + tempF) / 2 >= 80) {
+    hiF = -42.379 + 2.04901523 * tempF + 10.14333127 * rh
+        - 0.22475541 * tempF * rh - 0.00683783 * tempF * tempF
+        - 0.05481717 * rh * rh + 0.00122874 * tempF * tempF * rh
+        + 0.00085282 * tempF * rh * rh - 0.00000199 * tempF * tempF * rh * rh;
+
+    if (rh < 13 && tempF >= 80 && tempF <= 112) {
+      hiF -= ((13 - rh) / 4) * Math.sqrt((17 - Math.abs(tempF - 95)) / 17);
+    } else if (rh > 85 && tempF >= 80 && tempF <= 87) {
+      hiF += ((rh - 85) / 10) * ((87 - tempF) / 5);
+    }
+  }
+
+  return (hiF - 32) * 5 / 9;
+}
+
+// ================== India Air Quality Index ==================
+// CPCB concentration breakpoints. PM, SO2, NO2, O3 and NH3 are in µg/m³;
+// CO is converted from µg/m³ to mg/m³ before its sub-index is calculated.
+const AQI_BREAKPOINTS = {
+  pm10: [[0,50,0,50],[51,100,51,100],[101,250,101,200],[251,350,201,300],[351,430,301,400],[431,600,401,500]],
+  pm2_5: [[0,30,0,50],[31,60,51,100],[61,90,101,200],[91,120,201,300],[121,250,301,400],[251,500,401,500]],
+  nitrogen_dioxide: [[0,40,0,50],[41,80,51,100],[81,180,101,200],[181,280,201,300],[281,400,301,400],[401,800,401,500]],
+  sulphur_dioxide: [[0,40,0,50],[41,80,51,100],[81,380,101,200],[381,800,201,300],[801,1600,301,400],[1601,2400,401,500]],
+  carbon_monoxide: [[0,1,0,50],[1.01,2,51,100],[2.01,10,101,200],[10.01,17,201,300],[17.01,34,301,400],[34.01,50,401,500]],
+  ozone: [[0,50,0,50],[51,100,51,100],[101,168,101,200],[169,208,201,300],[209,748,301,400],[749,1000,401,500]],
+  ammonia: [[0,200,0,50],[201,400,51,100],[401,800,101,200],[801,1200,201,300],[1201,1800,301,400],[1801,2400,401,500]]
+};
+
+const AQI_POLLUTANT_LABELS = {
+  pm10: 'PM₁₀', pm2_5: 'PM₂.₅', nitrogen_dioxide: 'NO₂', sulphur_dioxide: 'SO₂',
+  carbon_monoxide: 'CO', ozone: 'O₃', ammonia: 'NH₃'
+};
+
+const AQI_GUIDANCE = [
+  {max:50, category:'Good', range:'0–50', color:'#7cb36d', risk:'Low risk.', general:'No special precautions.', vulnerable:'No special precautions.'},
+  {max:100, category:'Satisfactory', range:'51–100', color:'#9bcf8d', risk:'May cause minor breathing discomfort in vulnerable people.', general:'No special precautions.', vulnerable:'Do less prolonged or strenuous outdoor physical exertion.'},
+  {max:200, category:'Moderate', range:'101–200', color:'#f2ea22', risk:'May cause breathing or other health discomfort in vulnerable people.', general:'Do less prolonged or strenuous outdoor physical exertion.', vulnerable:'Avoid prolonged or strenuous outdoor physical exertion.'},
+  {max:300, category:'Poor', range:'201–300', color:'#fa7f38', risk:'May cause breathing discomfort in healthy people on prolonged exposure, and breathing or other health discomfort in vulnerable people on short exposure.', general:'Avoid outdoor physical exertion.', vulnerable:'Avoid outdoor physical activities.'},
+  {max:400, category:'Very Poor', range:'301–400', color:'#f53243', risk:'May cause respiratory illness in healthy people on prolonged exposure and pronounced respiratory or other illness in vulnerable people on short exposure.', general:'Avoid outdoor physical activities, especially during morning and late evening hours.', vulnerable:'Remain indoors and keep activity levels low.'},
+  {max:500, category:'Severe', range:'401–500', color:'#e72e3b', risk:'May cause respiratory illness in healthy people on prolonged exposure and serious respiratory or other illness in vulnerable people on short exposure.', general:'Avoid outdoor physical activities.', vulnerable:'Remain indoors and keep activity levels low.'}
+];
+
+let lastAQIContext = null;
+
+function aqiSubIndex(value, bands) {
+  if (!Number.isFinite(value) || value < 0) return null;
+  for (const [cLow, cHigh, iLow, iHigh] of bands) {
+    if (value <= cHigh) {
+      const adjusted = Math.max(value, cLow);
+      return ((iHigh - iLow) / (cHigh - cLow)) * (adjusted - cLow) + iLow;
+    }
+  }
+  return 500;
+}
+
+function meanEndingAt(values, index, hours) {
+  if (!Array.isArray(values) || index < 0) return null;
+  const valid = values.slice(Math.max(0, index - hours + 1), index + 1)
+    .filter(v => Number.isFinite(v));
+  return valid.length ? valid.reduce((sum, value) => sum + value, 0) / valid.length : null;
+}
+
+function indiaAQIFromHourly(hourly, index) {
+  const concentrations = {
+    pm10: meanEndingAt(hourly.pm10, index, 24),
+    pm2_5: meanEndingAt(hourly.pm2_5, index, 24),
+    nitrogen_dioxide: meanEndingAt(hourly.nitrogen_dioxide, index, 1),
+    sulphur_dioxide: meanEndingAt(hourly.sulphur_dioxide, index, 24),
+    carbon_monoxide: (() => { const v = meanEndingAt(hourly.carbon_monoxide, index, 8); return v === null ? null : v / 1000; })(),
+    ozone: meanEndingAt(hourly.ozone, index, 8),
+    ammonia: meanEndingAt(hourly.ammonia, index, 1)
+  };
+
+  const indices = Object.entries(concentrations)
+    .map(([key, value]) => ({key, value: aqiSubIndex(value, AQI_BREAKPOINTS[key])}))
+    .filter(item => Number.isFinite(item.value));
+  if (!indices.length) throw new Error('No pollutant readings were returned for this location.');
+  indices.sort((a, b) => b.value - a.value);
+  return {aqi: Math.min(500, Math.round(indices[0].value)), dominant: AQI_POLLUTANT_LABELS[indices[0].key]};
+}
+
+async function fetchIndiaAQI(lat, lon, targetDate) {
+  const variables = 'pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,ammonia';
+  let url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&hourly=${variables}&timezone=auto`;
+  if (targetDate) {
+    const prior = new Date(targetDate);
+    prior.setDate(prior.getDate() - 1);
+    url += `&start_date=${isoDateStr(prior)}&end_date=${isoDateStr(targetDate)}`;
+  } else {
+    url += '&past_hours=24&forecast_hours=1';
+  }
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Air-quality request failed (' + res.status + ').');
+  const data = await res.json();
+  if (!data.hourly || !Array.isArray(data.hourly.time) || !data.hourly.time.length) {
+    throw new Error('No air-quality data are available for this location and time.');
+  }
+
+  let index = data.hourly.time.length - 1;
+  if (targetDate) {
+    const targetHour = `${isoDateStr(targetDate)}T${String(targetDate.getHours()).padStart(2, '0')}:00`;
+    const exact = data.hourly.time.indexOf(targetHour);
+    if (exact >= 0) index = exact;
+  }
+  return indiaAQIFromHourly(data.hourly, index);
+}
+
+function guidanceForAQI(aqi) {
+  return AQI_GUIDANCE.find(item => aqi <= item.max) || AQI_GUIDANCE[AQI_GUIDANCE.length - 1];
+}
+
+function showAQILoading(location) {
+  const panel = document.getElementById('aqiPanel');
+  panel.classList.remove('hidden');
+  document.getElementById('aqiLocation').textContent = location;
+  document.getElementById('aqiValue').textContent = '—';
+  document.getElementById('aqiCategory').textContent = 'Loading';
+  document.getElementById('aqiRisk').textContent = 'Retrieving location-based pollutant data…';
+  document.getElementById('aqiGeneral').textContent = '—';
+  document.getElementById('aqiVulnerable').textContent = '—';
+}
+
+function showAQIError(location, message) {
+  const panel = document.getElementById('aqiPanel');
+  panel.classList.remove('hidden');
+  panel.style.borderLeftColor = '#888';
+  document.getElementById('aqiBadge').style.background = '#ddd';
+  document.getElementById('aqiLocation').textContent = location;
+  document.getElementById('aqiValue').textContent = '—';
+  document.getElementById('aqiCategory').textContent = 'Unavailable';
+  document.getElementById('aqiRisk').textContent = message;
+  document.getElementById('aqiGeneral').textContent = '—';
+  document.getElementById('aqiVulnerable').textContent = '—';
+  document.getElementById('aqiMeta').textContent = 'AQI requires location-based pollutant data.';
+}
+
+async function updateAQIPanel(lat, lon, targetDate, location) {
+  if (!document.getElementById('showAQIToggle').checked) return;
+  showAQILoading(location);
+  try {
+    const result = await fetchIndiaAQI(lat, lon, targetDate);
+    const guide = guidanceForAQI(result.aqi);
+    const panel = document.getElementById('aqiPanel');
+    panel.style.borderLeftColor = guide.color;
+    document.getElementById('aqiBadge').style.background = guide.color;
+    document.getElementById('aqiValue').textContent = result.aqi;
+    document.getElementById('aqiCategory').textContent = `${guide.category} (${guide.range})`;
+    document.getElementById('aqiRisk').textContent = guide.risk;
+    document.getElementById('aqiGeneral').textContent = guide.general;
+    document.getElementById('aqiVulnerable').textContent = guide.vulnerable;
+    document.getElementById('aqiMeta').textContent = `Dominant pollutant: ${result.dominant}. India AQI estimate calculated using CPCB breakpoints and Open-Meteo atmospheric pollutant data.`;
+  } catch (err) {
+    showAQIError(location, err.message);
+  }
+}
+
+function onAQIToggle() {
+  const enabled = document.getElementById('showAQIToggle').checked;
+  if (!enabled) {
+    document.getElementById('aqiPanel').classList.add('hidden');
+  } else if (lastAQIContext) {
+    updateAQIPanel(lastAQIContext.lat, lastAQIContext.lon, lastAQIContext.targetDate, lastAQIContext.location);
+  } else {
+    showAQIError('No location selected', 'Select or refresh a location to calculate AQI.');
+  }
 }
 
 function buildBackground() {
@@ -489,6 +786,13 @@ function hideLocationSuggestions() {
   activeLocationIndex = -1;
 }
 
+function updateLocationClearButton() {
+  document.getElementById('clearLocationSearch').classList.toggle(
+    'visible',
+    document.getElementById('locationSearch').value.length > 0
+  );
+}
+
 function showLocationMessage(message) {
   const box = document.getElementById('locationSuggestions');
   box.innerHTML = '';
@@ -506,7 +810,11 @@ function chooseLocation(index) {
   const label = locationLabel(place) || place.name;
   selectedLocation = {lat: place.latitude, lon: place.longitude, label, inputValue: label};
   document.getElementById('locationSearch').value = label;
+  updateLocationClearButton();
   hideLocationSuggestions();
+  if (document.getElementById('sourceSelect').value === 'location') {
+    fetchAndPlot();
+  }
 }
 
 function renderLocationSuggestions() {
@@ -524,8 +832,7 @@ function renderLocationSuggestions() {
       option.className = 'location-option' + (index === activeLocationIndex ? ' active' : '');
       option.setAttribute('role', 'option');
       option.textContent = locationLabel(place) || place.name;
-      option.addEventListener('mousedown', event => {
-        event.preventDefault();
+      option.addEventListener('click', event => {
         chooseLocation(index);
       });
       box.appendChild(option);
@@ -567,6 +874,7 @@ async function updateLocationSuggestions() {
 
 const locationSearchInput = document.getElementById('locationSearch');
 locationSearchInput.addEventListener('input', () => {
+  updateLocationClearButton();
   clearTimeout(locationSearchTimer);
   const query = locationSearchInput.value.trim();
   selectedLocation = null;
@@ -598,6 +906,17 @@ locationSearchInput.addEventListener('keydown', event => {
   }
 });
 locationSearchInput.addEventListener('blur', () => setTimeout(hideLocationSuggestions, 150));
+document.getElementById('clearLocationSearch').addEventListener('click', () => {
+  clearTimeout(locationSearchTimer);
+  locationSearchRequest++;
+  locationMatches = [];
+  activeLocationIndex = -1;
+  selectedLocation = null;
+  locationSearchInput.value = '';
+  updateLocationClearButton();
+  hideLocationSuggestions();
+  locationSearchInput.focus();
+});
 
 // ================== Data fetchers ==================
 async function fetchOpenMeteo(lat, lon, targetDate) {
@@ -700,9 +1019,11 @@ async function fetchAndPlot() {
 
   try {
     let reading, locationLabel;
+    let coordinates = null;
 
     if (source === 'auto') {
       const {lat, lon} = await getBrowserLocation();
+      coordinates = {lat, lon};
       reading = await fetchOpenMeteo(lat, lon, targetDateTime);
       locationLabel = await reverseGeocode(lat, lon);
     } else if (source === 'location') {
@@ -710,12 +1031,14 @@ async function fetchAndPlot() {
       const place = selectedLocation && selectedLocation.inputValue === inputValue
         ? selectedLocation
         : await searchLocation(inputValue);
+      coordinates = {lat: place.lat, lon: place.lon};
       reading = await fetchOpenMeteo(place.lat, place.lon, targetDateTime);
       locationLabel = place.label;
     } else if (source === 'manual') {
       const lat = parseFloat(document.getElementById('manualLat').value);
       const lon = parseFloat(document.getElementById('manualLon').value);
       if (isNaN(lat) || isNaN(lon)) throw new Error('Enter valid latitude and longitude.');
+      coordinates = {lat, lon};
       reading = await fetchOpenMeteo(lat, lon, targetDateTime);
       locationLabel = await reverseGeocode(lat, lon);
     } else if (source === 'manualdata') {
@@ -733,13 +1056,16 @@ async function fetchAndPlot() {
       }
       reading = await fetchAmbient(workerUrl, targetDateTime);
       locationLabel = 'Shakurbasti weather station';
+      coordinates = SHAKURBASTI_COORDS;
     }
 
     const history = loadHistory();
+    const feels_c = Math.round(feelsLikeC(reading.temp_c, reading.rh) * 10) / 10;
     history.push({
       iso: reading.time.toISOString(),
       temp_c: Math.round(reading.temp_c * 10) / 10,
       rh: Math.round(reading.rh * 10) / 10,
+      feels_c: feels_c,
       location: locationLabel
     });
     saveHistory(history);
@@ -751,8 +1077,16 @@ async function fetchAndPlot() {
     } else {
       prefix = source === 'manualdata' ? 'Recorded' : 'Live';
     }
-    setStatus(`${prefix} — ${locationLabel} — ${reading.temp_c.toFixed(1)}°C, ${reading.rh.toFixed(0)}% RH (${heatZone(reading.temp_c, reading.rh)})`, false);
+    setStatus(`${prefix} — ${locationLabel} — ${reading.temp_c.toFixed(1)}°C (feels like ${feels_c.toFixed(1)}°C), ${reading.rh.toFixed(0)}% RH (${heatZone(reading.temp_c, reading.rh)})`, false);
     document.getElementById('lastUpdated').textContent = 'Last updated: ' + reading.time.toLocaleString();
+
+    if (coordinates) {
+      lastAQIContext = {lat: coordinates.lat, lon: coordinates.lon, targetDate: targetDateTime, location: locationLabel};
+      await updateAQIPanel(coordinates.lat, coordinates.lon, targetDateTime, locationLabel);
+    } else if (document.getElementById('showAQIToggle').checked) {
+      lastAQIContext = null;
+      showAQIError(locationLabel, 'AQI cannot be calculated from temperature and humidity alone. Choose a location-based data source.');
+    }
 
   } catch (err) {
     setStatus('Error: ' + err.message, true);
@@ -791,13 +1125,17 @@ function renderPlot(history) {
     const zone = heatZone(r.temp_c, r.rh);
     const isLatest = i === history.length - 1;
     const label = `${formatDMY(t)} ${formatHM(t)}`;
+    // Calculate values for older stored points that predate this feature.
+    const feels = r.feels_c !== undefined
+      ? r.feels_c
+      : Math.round(feelsLikeC(r.temp_c, r.rh) * 10) / 10;
 
     traces.push({
       x: [r.rh],
       y: [r.temp_c],
       type: 'scatter',
       mode: mobile ? 'markers' : 'markers+text', // hide inline text labels on mobile to reduce clutter; still visible on hover/tap
-      name: `${label} (${r.temp_c}°C, ${r.rh}%) - ${zone}`,
+      name: `${label} (${r.temp_c}°C, feels ${feels}°C, ${r.rh}%) - ${zone}`,
       text: [isLatest ? label + ' ★' : label],
       textposition: 'top center',
       textfont: {color:'#000', size: isLatest ? 13 : 11},
@@ -807,7 +1145,7 @@ function renderPlot(history) {
         color: '#000',
         line: {width: isLatest ? 2.5 : 1.5, color:'#fff'}
       },
-      hovertemplate: `Date: ${label}<br>Location: ${r.location}<br>Temp: ${r.temp_c}°C<br>RH: ${r.rh}%<br>Zone: ${zone}<extra></extra>`
+      hovertemplate: `Date: ${label}<br>Location: ${r.location}<br>Temp: ${r.temp_c}°C<br>Feels like: ${feels}°C<br>RH: ${r.rh}%<br>Zone: ${zone}<extra></extra>`
     });
   });
 
